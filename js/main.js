@@ -187,7 +187,41 @@ const Main = {
   }
 };
 
+/* ---------- 手机方向引导 ---------- */
+const Orientation = {
+  ignored: false,
+  hint: null,
+  // 仅把"触屏 + 窄屏"视为手机；桌面窄窗口不打扰
+  isMobile() {
+    const touch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+    return touch && Math.min(window.innerWidth, window.innerHeight) <= 820;
+  },
+  isPortrait() {
+    return window.innerHeight > window.innerWidth;
+  },
+  update() {
+    if (!this.hint) return;
+    const show = this.isMobile() && this.isPortrait() && !this.ignored;
+    this.hint.classList.toggle('show', show);
+    document.body.classList.toggle('rotate-locked', show);
+  },
+  init() {
+    this.hint = document.getElementById('rotate-hint');
+    if (!this.hint) return;
+    const ignore = document.getElementById('rotate-ignore');
+    if (ignore) ignore.addEventListener('click', () => {
+      this.ignored = true;
+      this.update();
+    });
+    window.addEventListener('resize', () => this.update());
+    window.addEventListener('orientationchange', () => setTimeout(() => this.update(), 120));
+    // 尝试请求横屏锁定（部分浏览器/全屏下有效，失败静默忽略）
+    this.update();
+  }
+};
+
 /* ---------- 启动 ---------- */
 document.addEventListener('DOMContentLoaded', () => {
   UI.initSetup();
+  Orientation.init();
 });
