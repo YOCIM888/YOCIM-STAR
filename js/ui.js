@@ -41,6 +41,10 @@ const UI = {
       Main.beginNight();
     });
     this.$('restart-btn').addEventListener('click', () => location.reload());
+    const reviewBtn = this.$('review-btn');
+    if (reviewBtn) reviewBtn.addEventListener('click', () => {
+      if (typeof Review !== 'undefined') Review.run();
+    });
 
     // AI 设置入口 / 历史发言
     this.$('settings-entry').addEventListener('click', () => Settings.openPanel());
@@ -367,14 +371,16 @@ const UI = {
     const st = Game.state;
     const win = st.winner;
     const me = Game.human();
-    const playerWon = win.ids.includes(me.id) || (win.type !== 'neutral' && me.camp === win.type);
+    const isDraw = win.type === 'draw';
+    const playerWon = isDraw ? null : (win.ids.includes(me.id) || (win.type !== 'neutral' && me.camp === win.type));
     this.$('end-banner').textContent = 'GAME OVER // FINAL VERDICT';
     const title = this.$('end-title');
-    title.textContent = playerWon ? '胜 利' : '失 败';
-    title.className = 'end-title ' + (playerWon ? 'win' : 'lose');
+    title.textContent = isDraw ? '平 局' : (playerWon ? '胜 利' : '失 败');
+    title.className = 'end-title ' + (isDraw ? 'draw' : (playerWon ? 'win' : 'lose'));
     this.$('end-desc').textContent = `${win.desc}　你的身份：${Game.role(me).name}·${Game.role(me).star}（${CAMPS[me.camp].short}）`;
 
     const roles = this.$('end-roles');
+    roles.innerHTML = '';
     st.players.forEach(p => {
       const role = Game.role(p);
       const camp = CAMPS[p.camp];

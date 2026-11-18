@@ -47,6 +47,8 @@ const Game = {
     this.state = {
       count, round: 1, phase: 'night', players,
       log: [], winner: null, over: false,
+      tieCount: 0,              // 仅剩 2 人时的无人出局（平票/作废）累计次数，达 3 次判平局
+      reviews: [],              // 终局复盘报告（点击复盘按钮后生成）
       speechHistory: [],        // 历史发言 [{round, speeches:[{name,text}]}]
       todaySpeeches: [],        // 本轮已发言（供后续角色参考）
       flags: { nextDaySilenced: false, voteVoided: false },
@@ -384,6 +386,7 @@ const Game = {
       this.emit(ev, 'system', FLAVOR.voided);
       this.emit(ev, 'system', FLAVOR.tied);
       st.flags.voteVoided = true;
+      this.countStalemate(ev);
       this.afterVote(ev);
       return ev;
     }
@@ -423,14 +426,24 @@ const Game = {
 
     if (!top.length || top.length > 1) {
       this.emit(ev, 'system', FLAVOR.tied);
+      this.countStalemate(ev);
     } else {
       const exiled = this.byId(top[0]);
       this.emit(ev, 'system', FLAVOR.exile(exiled.name));
+      st.tieCount = 0; // 有人出局，僵局计数清零
       await this.applyDeath(exiled, 'exile', ev, '放逐');
     }
 
     this.afterVote(ev);
     return ev;
+  },
+
+  // 仅剩 2 人时，任何"本轮无人出局"（平票/全弃票/作废）都累计一次僵持
+  countStalemate(ev) {
+    const st = this.state;
+    if (this.alive().length !== 2) return;
+    st.tieCount = (st.tieCount || 0) + 1;
+    this.emit(ev, 'system', `终局僵持 ${st.tieCount}/3 · 若连续三次无人出局，本局将判定平局。`);
   },
 
   afterVote(ev) {
@@ -458,6 +471,11 @@ const Game = {
     const frost = st.players.find(p => p.roleId === 'frost');
 
     let win = null;
+    // 终局平局：仅剩 2 人且连续 3 次投票无人出局，打破互相平票死循环
+    if (alive.length === 2 && (st.tieCount || 0) >= 3) {
+      win = { type: 'draw', name: '平 局', ids: [],
+              desc: '终局连续三次平票，双方僵持不下，星空协议判定本局为平局。' };
+    }
     // 僵局兜底：场上只剩中立（无好人无坏人）→ 中立获胜
     if (!good.length && !evil.length && alive.length > 0) {
       win = { type: 'neutral', roleId: alive[0].roleId, name: CAMPS[alive[0].camp].short,
@@ -494,9 +512,11 @@ const Game = {
       st.over = true;
       st.winner = win;
       const me = this.human();
-      const playerWon = win.ids.includes(me.id) || (win.type !== 'neutral' && me.camp === win.type);
-      this.emit(ev, 'win', `${win.name} 获胜！${playerWon ? '【胜利】' : '【失败】'}`,
-        { winner: win, playerWon });
+      const playerWon = win.type === 'draw' ? null
+        : (win.ids.includes(me.id) || (win.type !== 'neutral' && me.camp === win.type));
+      const tag = win.type === 'draw' ? '【平局】' : (playerWon ? '【胜利】' : '【失败】');
+      const headline = win.type === 'draw' ? `本局结束 · ${win.name}！` : `${win.name} 获胜！`;
+      this.emit(ev, 'win', headline + tag, { winner: win, playerWon });
     }
     return win;
   }
