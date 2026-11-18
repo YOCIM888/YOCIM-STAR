@@ -1,0 +1,55 @@
+name: Deploy YOCIM-STAR to GitHub Pages
+
+# main 分支 push 或手动触发
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# 允许 GITHUB_TOKEN 部署 Pages 与 OIDC
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同一时间只允许一个部署进行，但不取消正在运行的部署
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build static site
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Pages
+        id: pages
+        uses: actions/configure-pages@v5
+
+      - name: Assemble deploy directory
+        run: |
+          set -e
+          mkdir -p _site
+          # 只部署站点运行所需文件，排除本地文档/测试脚本/工作数据
+          cp -r index.html css js public _site/
+          cp CNAME robots.txt sitemap.xml .nojekyll _site/
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
