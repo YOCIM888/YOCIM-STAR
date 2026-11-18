@@ -19,7 +19,7 @@ const Game = {
 
     const players = roleList.map((role, i) => ({
       id: i,
-      name: i === 0 ? '你' : (names[i - 1] || ('玩家' + (i + 1))),
+      name: names[i] || ('玩家' + (i + 1)),
       roleId: role.id,
       camp: role.camp,
       isHuman: i === 0,
@@ -47,6 +47,8 @@ const Game = {
     this.state = {
       count, round: 1, phase: 'night', players,
       log: [], winner: null, over: false,
+      speechHistory: [],        // 历史发言 [{round, speeches:[{name,text}]}]
+      todaySpeeches: [],        // 本轮已发言（供后续角色参考）
       flags: { nextDaySilenced: false, voteVoided: false },
       playerNightAction: null,  // { skillId, targetId, extra:{camp,text} }
       playerVote: null,
@@ -103,18 +105,17 @@ const Game = {
 
     st.players.forEach(p => { p.protected = false; });
 
-    // 收集行动：玩家 + AI（AI 决策可异步并行，LLM 托管与本地 AI 统一入口）
+    // 收集行动：玩家 + AI（串行请求，等上一个角色决策完成再发下一个，降低连接失败率）
     const actions = [];
     const me = this.human();
     if (me.isHuman && this.canNightAct(me) && st.playerNightAction) {
       actions.push(Object.assign({ player: me }, st.playerNightAction));
     }
     const aiActors = st.players.filter(p => !p.isHuman && p.alive && this.canNightAct(p));
-    const aiActions = await Promise.all(aiActors.map(async p => {
+    for (const p of aiActors) {
       const act = await Decider.decide(p, 'night', st);
-      return act ? Object.assign({ player: p }, act) : null;
-    }));
-    aiActions.forEach(a => { if (a) actions.push(a); });
+      if (act) actions.push(Object.assign({ player: p }, act));
+    }
 
     const order = ['silence', 'rewrite', 'voteRedirect', 'investigate', 'protect', 'judge', 'bet', 'attack', 'poison'];
     actions.sort((a, b) => order.indexOf(a.skillId) - order.indexOf(b.skillId));
@@ -320,11 +321,11 @@ const Game = {
   },
 
   /* ---------------- 白天 · 发言 ---------------- */
-  async collectSpeeches(playerText) {
+  async collectSpeeches(playerText, onSpeech = null) {
     const st = this.state;
     const list = [];
-    const order = shuffle(this.alive().map(p => p.id));
-    const me = this.human();
+    const order = this.alive().map(p => p.id).sort((a, b) => a - b); // 按座位顺序依次发言
+    st.todaySpeeches = [];
 
     for (const id of order) {
       const p = this.byId(id);
@@ -339,14 +340,22 @@ const Game = {
       if (p.rewriteText && p.rewriteBy != null) {
         text = p.rewriteText;
       }
-      list.push({ speakerId: id, name: p.name, text, camp: p.camp, isHuman: p.isHuman });
+      const s = { speakerId: id, name: p.name, text, camp: p.camp, isHuman: p.isHuman, round: st.round };
+      list.push(s);
+      // 立刻写入公开信息：后续发言者可参考本轮前面的发言
+      st.todaySpeeches.push({ name: s.name, text: s.text });
+      st.log.push({ type: 'speech', text: `${s.name}：${s.text}`, speakerId: s.speakerId });
+      // 逐条展示（打字机），展示完再进入下一个角色
+      if (onSpeech) await onSpeech(s);
     }
 
-    // 记录到日志（玩家能看到的公开信息）
-    list.forEach(s => {
-      this.state.log.push({ type: 'speech', text: `${s.name}：${s.text}`, speakerId: s.speakerId });
+    // 本轮全员发言写入历史，供后续回合参考
+    st.speechHistory.push({
+      round: st.round,
+      speeches: list.map(s => ({ name: s.name, text: s.text }))
     });
-    // 发言结束后清理流焰改写效果
+    if (st.speechHistory.length > 20) st.speechHistory.shift();
+    st.todaySpeeches = [];
     st.players.forEach(p => { p.rewriteText = null; p.rewriteBy = null; });
     return list;
   },
@@ -379,19 +388,17 @@ const Game = {
       return ev;
     }
 
-    // 收集投票（AI 决策可并行）
+    // 收集投票（串行请求，降低并发连接失败率）
     const voters = this.alive();
-    const voteResults = await Promise.all(voters.map(async voter => {
-      if (voter.isHuman) return { id: voter.id, targetId: st.playerVote };
-      const targetId = await Decider.decide(voter, 'vote', st);
-      return { id: voter.id, targetId };
-    }));
     const votes = {};
-    voteResults.forEach(({ id, targetId }) => {
-      if (targetId != null && this.byId(targetId) && this.byId(targetId).alive && targetId !== id) {
-        votes[id] = targetId;
+    for (const voter of voters) {
+      let targetId;
+      if (voter.isHuman) targetId = st.playerVote;
+      else targetId = await Decider.decide(voter, 'vote', st);
+      if (targetId != null && this.byId(targetId) && this.byId(targetId).alive && targetId !== voter.id) {
+        votes[voter.id] = targetId;
       }
-    });
+    }
 
     // 魅影票数转移：投给魅影的票转到其指定目标
     const enchantress = st.players.find(p => p.roleId === 'enchantress' && p.alive && p.redirectTarget != null);

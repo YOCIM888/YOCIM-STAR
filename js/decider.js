@@ -35,9 +35,16 @@ const ContextBuilder = {
       public: {
         round: st.round,
         aliveCount: st.players.filter(p => p.alive).length,
+        aliveNames: st.players.filter(p => p.alive).map(p => p.name),
         deaths: deaths.slice(-12),
         systemEvents: systemEvents.slice(-12),
-        speeches: speeches.slice(-24),
+        speeches: speeches.slice(-16),
+        // 本轮已发言（按先后顺序），让后发言者能看到前面角色的发言
+        todaySpeeches: (st.todaySpeeches || []).slice(),
+        // 往期全员发言，供新回合参考
+        speechHistory: (st.speechHistory || []).slice(-3).map(h => ({
+          round: h.round, speeches: h.speeches.slice()
+        })),
         votes: votes.slice(-16)
       }
     };
@@ -58,8 +65,8 @@ const ContextBuilder = {
 
 const ACTION_PROMPT = {
   speech: '现在是白天讨论环节，请生成你的发言。',
-  night: '现在是夜晚行动阶段。请使用你的技能，只输出你要指定的目标玩家名字（必须是公开局势中出现过的存活玩家）；若不想使用则输出「跳过」。判官输出格式为「玩家名字 阵营」（阵营为好人/坏人/中立）；流焰输出格式为「玩家名字：改写后的发言」。',
-  vote: '现在是投票阶段，请输出你要投票放逐的玩家名字（必须是存活玩家），或输出「弃票」。',
+  night: '现在是夜晚行动阶段。请使用你的技能，只输出你要指定的目标玩家名字（必须是下方「存活玩家名单」中的名字）；若不想使用则输出「跳过」。判官输出格式为「玩家名字 阵营」（阵营为好人/坏人/中立）；流焰输出格式为「玩家名字：改写后的发言」。',
+  vote: '现在是投票阶段，请从下方「存活玩家名单」中输出你要投票放逐的玩家名字，或输出「弃票」。',
   voidVote: '你是君主，拥有作废本场投票的能力。请输出「是」表示作废本场投票，或「否」表示正常投票。',
   deathChain: '你是狂人，死亡时将带走一人。请输出你要带走的目标玩家名字。',
   revive: '你是牧师，请输出你要复活的已死亡玩家名字。'

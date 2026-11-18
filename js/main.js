@@ -103,17 +103,23 @@ const Main = {
     if (st.flags.nextDaySilenced) {
       UI.setBanner('寒霜发动【缄默不语】，今日全场禁言，无法发言！');
       await UI.playEvents([{ type: 'system', text: '频道已被冻结，所有发言通道关闭。' }], 600);
-    } else if (!Game.human().alive) {
-      UI.setBanner('你已出局，正在旁观白天的讨论……');
-      const speeches = await Game.collectSpeeches('');
-      await UI.showSpeeches(speeches);
-      await UI.wait(300);
     } else {
-      UI.setBanner('白天讨论 · 每人发言 100 字以内');
-      const text = await UI.askSpeech();
-      const speeches = await Game.collectSpeeches(text);
-      await UI.showSpeeches(speeches);
-      await UI.wait(400);
+      const me = Game.human();
+      let text = '';
+      if (!me.alive) {
+        UI.setBanner('你已出局，正在旁观白天的讨论……');
+      } else {
+        UI.setBanner('白天讨论 · 每人发言 100 字以内 · 按座位顺序依次发言');
+        text = await UI.askSpeech();
+      }
+      // 逐个决策、逐个展示：后发言者可参考前面发言，玩家也能看清每一条
+      let first = true;
+      await Game.collectSpeeches(text, async s => {
+        await UI.showSpeech(s, first);
+        first = false;
+        UI.renderPlayers();
+      });
+      await UI.wait(350);
     }
 
     this.beginVote();
@@ -224,4 +230,5 @@ const Orientation = {
 document.addEventListener('DOMContentLoaded', () => {
   UI.initSetup();
   Orientation.init();
+  ThoughtFab.init();
 });
