@@ -20,7 +20,8 @@ class Semaphore {
 }
 
 const LLMClient = {
-  sem: new Semaphore(13),
+  // 引擎已改为按座位顺序串行决策；这里再限制为 1，确保任何情况下都不会并发轰炸服务商
+  sem: new Semaphore(1),
   timeoutMs: 45000,
 
   endpoint(provider) {
@@ -108,6 +109,12 @@ class LLMSession {
     const sysEvents = pub.systemEvents.length ? pub.systemEvents.join('；') : '无';
     const speeches = pub.speeches.length ? pub.speeches.map(s => `  ${s.name}：${s.text}`).join('\n') : '  无人发言';
     const votes = pub.votes.length ? pub.votes.map(v => `  ${v}`).join('\n') : '  暂无';
+    const aliveNames = (pub.aliveNames || []).join('、') || '未知';
+    const today = (pub.todaySpeeches || []).length
+      ? pub.todaySpeeches.map(s => `  ${s.name}：${s.text}`).join('\n') : '  本轮尚无人发言';
+    const history = (pub.speechHistory || []).length
+      ? pub.speechHistory.map(h => `  【第 ${h.round} 回合】\n` + h.speeches.map(s => `    ${s.name}：${s.text}`).join('\n')).join('\n')
+      : '  暂无往期记录';
 
     return `你是《星空疑云》游戏中的玩家【${self.name}·${self.star}】。
 
@@ -125,7 +132,17 @@ ${notes}
 
 【当前局势（第 ${pub.round} 回合，场上存活 ${pub.aliveCount} 人）】
 公开事件：${deaths ? '死亡：' + deaths : ''}${sysEvents ? '；事件：' + sysEvents : ''}
-公开发言：
+
+【存活玩家名单】（技能与投票目标必须是这里的名字，包含你自己）
+${aliveNames}
+
+【本轮已发言 · 按先后顺序】（你会排在最后，请结合前面人的发言）
+${today}
+
+【往期全员发言记录】（新回合请据此分析矛盾与立场）
+${history}
+
+【最近公开动态】
 ${speeches}
 公开票型：
 ${votes}
@@ -165,7 +182,7 @@ ${votes}
     // 写入本角色独立会话历史
     this.messages.push({ role: 'user', content: actionPrompt });
     this.messages.push({ role: 'assistant', content: raw });
-    this.thoughts.push({ round: visible.public.round, action: debugTag, text: parsed.think, at: Date.now() });
+    this.thoughts.push({ round: visible.public.round, action: debugTag, name: visible.self.name, text: parsed.think, at: Date.now() });
     if (this.thoughts.length > 60) this.thoughts.shift();
     return parsed.speak;
   }

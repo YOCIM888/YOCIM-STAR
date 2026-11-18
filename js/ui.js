@@ -42,9 +42,11 @@ const UI = {
     });
     this.$('restart-btn').addEventListener('click', () => location.reload());
 
-    // AI 设置入口
+    // AI 设置入口 / 历史发言
     this.$('settings-entry').addEventListener('click', () => Settings.openPanel());
     this.$('hud-settings').addEventListener('click', () => Settings.openPanel());
+    const histBtn = this.$('history-btn');
+    if (histBtn) histBtn.addEventListener('click', () => this.showSpeechHistory());
   },
 
   /* ---------- 身份揭示 ---------- */
@@ -125,15 +127,15 @@ const UI = {
       const role = Game.role(p);
       const camp = CAMPS[p.camp];
       const card = document.createElement('div');
-      card.className = `player-card ${p.camp} ${p.alive ? '' : 'dead'}`;
+      card.className = `player-card ${p.alive ? '' : 'dead'}`;
       if (selectableIds && selectableIds.includes(p.id)) card.classList.add('selectable');
       if (selectedIds.includes(p.id)) card.classList.add('chosen');
       card.dataset.pid = p.id;
 
       const showRole = !p.alive || p.isHuman || revealAll;
       const hosted = !p.isHuman && Settings.isLLMHosted(p.roleId);
-      const canPeek = hosted && Settings.data.thoughtVision && typeof SessionManager !== 'undefined' && SessionManager.has(p.roleId);
-      if (canPeek) card.classList.add('peekable');
+      // 阵营色只在身份公开（死亡亮牌/自己/结算）时显示，避免提前泄露
+      if (showRole) card.classList.add(p.camp);
       let statusText = '';
       if (!p.alive) statusText = '已出局';
       else if (p.protected) statusText = '<span class="pc-status protected">✦ 受保护</span>';
@@ -147,37 +149,26 @@ const UI = {
             ${showRole ? role.name + '·' + role.star : '身份未知'}
           </div>
           <div>${statusText ? statusText : '<div class="pc-status">' + (p.alive ? '在线' : '') + '</div>'}</div>
-        </div>
-        ${canPeek ? '<div class="peek-icon" data-pid="' + p.id + '" title="查看AI思考">◉</div>' : ''}`;
+        </div>`;
       grid.appendChild(card);
     });
-    if (!grid.dataset.peekBound) {
-      grid.addEventListener('click', e => {
-        const icon = e.target.closest('.peek-icon');
-        if (!icon) return;
-        e.stopPropagation();
-        this.showThought(+icon.dataset.pid);
-      });
-      grid.dataset.peekBound = '1';
-    }
+    if (typeof ThoughtFab !== 'undefined') ThoughtFab.sync();
   },
 
-  /* ---------- 思考透视 ---------- */
-  showThought(pid) {
-    const p = Game.byId(pid);
-    if (!p) return;
-    const session = SessionManager.get(p.roleId);
-    const thought = session ? session.latestThought() : null;
-    const role = Game.role(p);
-    const body = thought && thought.text
-      ? `<div class="thought-meta">第 ${thought.round} 回合 · ${thought.action || '决策'}</div>
-         <div class="thought-text">${Settings.esc(thought.text)}</div>`
-      : '<div class="thought-empty">该角色暂无思考记录（可能尚未行动，或模型未返回思考内容）。</div>';
-    this.modal({
-      title: `◉ ${p.name} 的思考 · ${role.name}`,
-      body,
-      buttons: [{ label: '关闭', value: false }]
-    });
+  /* ---------- 历史发言面板 ---------- */
+  showSpeechHistory() {
+    const hist = (Game.state && Game.state.speechHistory) || [];
+    let body;
+    if (!hist.length) {
+      body = '<div class="thought-empty">还没有已结束的发言回合。</div>';
+    } else {
+      body = '<div class="history-list">' + hist.slice().reverse().map(h => `
+        <div class="hist-round">
+          <div class="hist-round-title">◆ 第 ${h.round} 回合</div>
+          ${h.speeches.map(s => `<div class="hist-line"><b>${Settings.esc(s.name)}</b><span>${Settings.esc(s.text)}</span></div>`).join('')}
+        </div>`).join('') + '</div>';
+    }
+    this.modal({ title: '历史发言记录', body, buttons: [{ label: '关闭', value: false }] });
   },
 
   /* ---------- 事件播放 ---------- */
@@ -218,24 +209,21 @@ const UI = {
   setBanner(html) { this.$('stage-banner').innerHTML = `<span class="prompt-icon">▸</span>${html}`; },
   clearStage() { this.$('speech-stage').innerHTML = ''; this.$('action-area').innerHTML = ''; },
 
-  /* ---------- 发言展示（打字机） ---------- */
-  async showSpeeches(speeches) {
+  /* ---------- 单条发言展示（打字机，放慢节奏，不带阵营信息） ---------- */
+  async showSpeech(s, first = false) {
     const stage = this.$('speech-stage');
-    stage.innerHTML = '<div class="intel-label" style="color:var(--good)">// 公开讨论记录</div>';
-    for (const s of speeches) {
-      const bubble = document.createElement('div');
-      bubble.className = `speech-bubble ${s.camp}`;
-      bubble.style.setProperty('--c', CAMPS[s.camp].color);
-      bubble.innerHTML = `<div class="sp-name" style="color:${CAMPS[s.camp].color}">${s.name}</div><div class="sp-text"></div>`;
-      stage.appendChild(bubble);
-      const textEl = bubble.querySelector('.sp-text');
-      for (let i = 1; i <= s.text.length; i++) {
-        textEl.textContent = s.text.slice(0, i);
-        if (i % 2 === 0) await this.wait(14);
-      }
-      stage.scrollTop = stage.scrollHeight;
-      await this.wait(140);
+    if (first) stage.innerHTML = '<div class="intel-label" style="color:var(--good)">// 公开讨论记录</div>';
+    const bubble = document.createElement('div');
+    bubble.className = 'speech-bubble'; // 不附带阵营 class，避免泄露身份
+    bubble.innerHTML = `<div class="sp-name">${Settings.esc(s.name)}${s.isHuman ? '<span class="me-tag">YOU</span>' : ''}</div><div class="sp-text"></div>`;
+    stage.appendChild(bubble);
+    const textEl = bubble.querySelector('.sp-text');
+    for (let i = 1; i <= s.text.length; i++) {
+      textEl.textContent = s.text.slice(0, i);
+      await this.wait(20); // 每字 20ms，100 字约 2 秒，看清节奏
     }
+    stage.scrollTop = stage.scrollHeight;
+    await this.wait(260); // 发言之间停顿，便于消化
   },
 
   /* ---------- 发言输入 ---------- */
@@ -300,8 +288,8 @@ const UI = {
           const chip = document.createElement('div');
           chip.className = 'target-chip';
           chip.dataset.pid = p.id;
-          const c = CAMPS[p.camp].color;
-          chip.innerHTML = `<span class="tc-dot" style="background:${c}"></span>${p.name}<span style="color:var(--dim);font-size:10px">${Game.role(p).name}</span>`;
+          // 只显示昵称，绝不显示身份/阵营（否则投票等于明牌）
+          chip.innerHTML = `<span class="tc-dot" style="background:var(--good)"></span>${Settings.esc(p.name)}`;
           chip.addEventListener('click', () => {
             list.querySelectorAll('.target-chip').forEach(x => x.classList.remove('selected'));
             chip.classList.add('selected');
@@ -400,5 +388,107 @@ const UI = {
       roles.appendChild(div);
     });
     this.show('end-screen');
+  }
+};
+
+/* ============================================================
+ * 思考透视 · 可拖动悬浮球 + 浮窗（按回合依次显示所有 AI 的思考）
+ * ============================================================ */
+const ThoughtFab = {
+  ball: null, panel: null, open: false,
+  dragging: false, moved: false, sx: 0, sy: 0, ox: 0, oy: 0,
+
+  init() {
+    this.ball = document.getElementById('thought-fab');
+    this.panel = document.getElementById('thought-panel');
+    if (!this.ball || !this.panel) return;
+    this.ball.addEventListener('mousedown', e => this.down(e));
+    this.ball.addEventListener('touchstart', e => this.down(e), { passive: false });
+    window.addEventListener('mousemove', e => this.move(e));
+    window.addEventListener('touchmove', e => this.move(e), { passive: false });
+    window.addEventListener('mouseup', () => this.up());
+    window.addEventListener('touchend', () => this.up());
+    const close = this.panel.querySelector('.tf-close');
+    if (close) close.addEventListener('click', () => this.hide());
+    this.sync();
+  },
+
+  // 仅在开启思考透视、且有托管 AI、且对局进行时显示
+  sync() {
+    const st = Game.state;
+    const hasAI = typeof SessionManager !== 'undefined' && Object.keys(SessionManager.sessions || {}).length > 0;
+    // 结算后也保留，方便回顾整局全部思考
+    const show = !!(Settings.data.thoughtVision && hasAI && st);
+    if (this.ball) this.ball.classList.toggle('show', show);
+    if (!show) this.hide();
+    else if (this.open) this.render();
+  },
+
+  down(e) {
+    if (!this.ball || !this.ball.classList.contains('show')) return;
+    this.dragging = true; this.moved = false;
+    const t = e.touches ? e.touches[0] : e;
+    this.sx = t.clientX; this.sy = t.clientY;
+    const r = this.ball.getBoundingClientRect();
+    this.ox = r.left; this.oy = r.top;
+    e.preventDefault();
+  },
+  move(e) {
+    if (!this.dragging) return;
+    const t = e.touches ? e.touches[0] : e;
+    const dx = t.clientX - this.sx, dy = t.clientY - this.sy;
+    if (Math.abs(dx) > 5 || Math.abs(dy) > 5) this.moved = true;
+    const x = Math.max(4, Math.min(window.innerWidth - 52, this.ox + dx));
+    const y = Math.max(4, Math.min(window.innerHeight - 52, this.oy + dy));
+    this.ball.style.left = x + 'px';
+    this.ball.style.top = y + 'px';
+    e.preventDefault();
+  },
+  up() {
+    if (!this.dragging) return;
+    this.dragging = false;
+    if (!this.moved) this.toggle();
+  },
+  toggle() { this.open ? this.hide() : this.show(); },
+
+  show() {
+    if (!this.ball || !this.ball.classList.contains('show')) return;
+    this.render();
+    this.panel.classList.add('show');
+    this.open = true;
+  },
+  hide() {
+    if (!this.panel) return;
+    this.panel.classList.remove('show');
+    this.open = false;
+  },
+
+  collect() {
+    const all = [];
+    Object.values(SessionManager.sessions || {}).forEach(s => {
+      (s.thoughts || []).forEach(t => all.push(t));
+    });
+    all.sort((a, b) => (a.round - b.round) || (a.at - b.at));
+    return all;
+  },
+
+  render() {
+    const body = this.panel.querySelector('.tf-body');
+    if (!body) return;
+    const list = this.collect();
+    if (!list.length) {
+      body.innerHTML = '<div class="thought-empty">暂无思考记录。AI 行动后，这里会按回合依次显示。</div>';
+      return;
+    }
+    body.innerHTML = list.map(t => `
+      <div class="tf-item">
+        <div class="tf-meta">第 ${t.round} 回合 · ${this.actionName(t.action)} · ${Settings.esc(t.name || '')}</div>
+        <div class="tf-text">${Settings.esc(t.text || '（模型未返回思考内容）')}</div>
+      </div>`).join('');
+    body.scrollTop = body.scrollHeight;
+  },
+
+  actionName(a) {
+    return ({ speech: '发言', night: '夜晚技能', vote: '投票', voidVote: '作废投票', deathChain: '死亡连锁', revive: '复活' })[a] || (a || '决策');
   }
 };

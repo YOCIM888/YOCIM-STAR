@@ -94,6 +94,7 @@
       <div class="survival"><span class="dot good"></span><b id="alive-good">0</b></div>
       <div class="survival"><span class="dot evil"></span><b id="alive-evil">0</b></div>
       <div class="survival"><span class="dot neutral"></span><b id="alive-neutral">0</b></div>
+      <button class="hud-icon-btn" id="history-btn" title="历史发言">📜</button>
       <button class="hud-settings" id="hud-settings" title="AI 托管设置">⚙</button>
     </div>
   </header>
@@ -140,6 +141,13 @@
     <button id="restart-btn" class="neon-btn primary big"><span>再来一局</span> <span class="arrow">▶</span></button>
   </div>
 </section>
+
+<!-- 思考透视：可拖动悬浮球 + 浮窗 -->
+<div id="thought-fab" class="thought-fab" title="AI 思考透视（可拖动）">◉</div>
+<div id="thought-panel" class="thought-panel">
+  <div class="tf-head"><b>◉ AI 思考透视</b><button class="tf-close" title="关闭">✕</button></div>
+  <div class="tf-body"></div>
+</div>
 
 <!-- 模态框容器 -->
 <div id="modal-root"></div>
