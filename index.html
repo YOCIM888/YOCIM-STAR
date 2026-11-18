@@ -138,9 +138,21 @@
     <div id="end-desc" class="end-desc"></div>
     <div class="reveal-all-title">// 全场身份揭晓</div>
     <div id="end-roles" class="end-roles"></div>
-    <button id="restart-btn" class="neon-btn primary big"><span>再来一局</span> <span class="arrow">▶</span></button>
+    <div class="end-actions">
+      <button id="review-btn" class="neon-btn ghost big"><span>◈ 查看复盘报告</span></button>
+      <button id="restart-btn" class="neon-btn primary big"><span>再来一局</span> <span class="arrow">▶</span></button>
+    </div>
   </div>
 </section>
+
+<!-- 终局复盘：全员报告浮层 -->
+<div id="review-overlay" class="review-overlay">
+  <div class="review-box">
+    <div class="review-head"><b>◈ 终局复盘 // 全员推理报告</b><button id="review-close" class="review-close" title="关闭">✕</button></div>
+    <div id="review-progress" class="review-progress"></div>
+    <div id="review-body" class="review-body"></div>
+  </div>
+</div>
 
 <!-- 思考透视：可拖动悬浮球 + 浮窗 -->
 <div id="thought-fab" class="thought-fab" title="AI 思考透视（可拖动）">◉</div>
@@ -160,6 +172,7 @@
 <script src="js/ai.js"></script>
 <script src="js/llm.js"></script>
 <script src="js/decider.js"></script>
+<script src="js/review.js"></script>
 <script src="js/engine.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/main.js"></script>

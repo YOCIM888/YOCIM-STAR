@@ -231,4 +231,5 @@ document.addEventListener('DOMContentLoaded', () => {
   UI.initSetup();
   Orientation.init();
   ThoughtFab.init();
+  if (typeof Review !== 'undefined') Review.init();
 });

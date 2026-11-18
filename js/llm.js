@@ -187,6 +187,39 @@ ${votes}
     return parsed.speak;
   }
 
+  // 终局复盘：用该角色自己的会话服务商生成 800 字内报告
+  // 对局已结束，brief 中包含全场揭晓信息，属于合法复盘材料
+  async generateReview(brief, name, round) {
+    const system = `你是《星空疑云》的终局复盘分析师，正在以玩家【${name}】的第一视角撰写复盘报告。
+对局已经结束，你会收到全场揭晓信息（这些是你游戏中未知、现在才公开的事实）。
+要求：
+1. 中文，800 字以内，分为四段：①身份与目标 ②关键局势回顾 ③判断得失 ④重来一局的策略。
+2. 只依据提供的事实分析，不要杜撰未给出的情节；可以有推理与自我批评。
+3. 严格按格式输出：<think>简短推理</think><review>报告正文</review>，不要输出其他文字。`;
+    const convo = [
+      { role: 'system', content: system },
+      { role: 'user', content: brief }
+    ];
+    let raw;
+    try {
+      const r = await LLMClient.chat(this.provider, convo, { temperature: 0.8, maxTokens: 1800 });
+      raw = r.content;
+    } catch (e) {
+      const err = new Error(e.message || 'LLM 复盘调用失败');
+      err.__llm = true;
+      throw err;
+    }
+    const tm = raw.match(/<think>([\s\S]*?)<\/think>/i);
+    const rm = raw.match(/<review>([\s\S]*?)<\/review>/i);
+    const think = tm ? tm[1].trim() : '';
+    let text = rm ? rm[1].trim() : raw.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/<[^>]+>/g, '').trim();
+    text = String(text || '').trim().slice(0, 800);
+    if (!text) throw new Error('AI 未返回有效复盘内容');
+    this.thoughts.push({ round: round || 1, action: 'review', name, text: think || '（复盘推理已生成）', at: Date.now() });
+    if (this.thoughts.length > 60) this.thoughts.shift();
+    return text;
+  }
+
   latestThought() {
     return this.thoughts.length ? this.thoughts[this.thoughts.length - 1] : null;
   }
