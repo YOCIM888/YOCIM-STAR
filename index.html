@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YOCIM-STAR · 星空疑云</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90' style='fill:%2300e5ff'>✦</text></svg>">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="scanlines"></div>
+<div class="grid-bg"></div>
+
+<!-- ============ 开局界面 ============ -->
+<section id="setup-screen" class="screen active">
+  <div class="setup-wrap">
+    <div class="logo-block">
+      <div class="logo-sub">CYBER DETECTION PROTOCOL // v2.077</div>
+      <h1 class="glitch" data-text="YOCIM-STAR">YOCIM-STAR</h1>
+      <div class="title-cn">星 空 疑 云</div>
+      <p class="tagline">霓虹之下，星空之中，真相只有一个。<br>隐藏身份，洞察谎言，活到最后。</p>
+    </div>
+
+    <div class="camp-legend">
+      <div class="legend-item good">
+        <div class="legend-icon">✦</div>
+        <div class="legend-text"><b>蓝色星空</b><span>好人 · 肃清敌人</span></div>
+      </div>
+      <div class="legend-item evil">
+        <div class="legend-icon">✧</div>
+        <div class="legend-text"><b>红色星空</b><span>坏人 · 吞噬光明</span></div>
+      </div>
+      <div class="legend-item neutral">
+        <div class="legend-icon">✶</div>
+        <div class="legend-text"><b>金色星空</b><span>中立 · 独善其身</span></div>
+      </div>
+    </div>
+
+    <div class="count-select">
+      <div class="select-label">// 选择对局人数</div>
+      <div class="count-options" id="count-options">
+        <button class="count-btn" data-n="6">6<span>人</span></button>
+        <button class="count-btn" data-n="8">8<span>人</span></button>
+        <button class="count-btn" data-n="10">10<span>人</span></button>
+        <button class="count-btn" data-n="12">12<span>人</span></button>
+        <button class="count-btn selected" data-n="14">14<span>人</span></button>
+      </div>
+      <div class="setup-info" id="setup-info"></div>
+    </div>
+
+      <button id="start-btn" class="neon-btn primary big">
+        <span>接入星空</span> <span class="arrow">▶</span>
+      </button>
+      <button id="settings-entry" class="neon-btn ghost small ai-entry">
+        <span>⚙ AI 托管设置</span>
+      </button>
+      <div class="setup-footer">SYSTEM READY · 玩家发言上限 100 字 · 随机身份分配</div>
+  </div>
+</section>
+
+<!-- ============ 身份揭示界面 ============ -->
+<section id="reveal-screen" class="screen">
+  <div class="reveal-wrap">
+    <div class="reveal-scan">IDENTITY DECRYPTION COMPLETE</div>
+    <div class="reveal-card" id="reveal-card"></div>
+    <div class="reveal-hint">你的身份仅你自己可见 · 记住你的阵营与目标</div>
+    <button id="enter-btn" class="neon-btn primary"><span>进入对局</span> <span class="arrow">▶</span></button>
+  </div>
+</section>
+
+<!-- ============ 游戏主界面 ============ -->
+<section id="game-screen" class="screen">
+  <header class="hud">
+    <div class="hud-left">
+      <div class="hud-logo">YOCIM<span class="dim">-STAR</span></div>
+      <div class="hud-round">回合 <b id="round-num">1</b></div>
+    </div>
+    <div class="hud-center">
+      <div id="phase-badge" class="phase-badge night">夜晚</div>
+      <div id="phase-desc" class="phase-desc">星空协议启动</div>
+    </div>
+    <div class="hud-right">
+      <div class="survival"><span class="dot good"></span><b id="alive-good">0</b></div>
+      <div class="survival"><span class="dot evil"></span><b id="alive-evil">0</b></div>
+      <div class="survival"><span class="dot neutral"></span><b id="alive-neutral">0</b></div>
+      <button class="hud-settings" id="hud-settings" title="AI 托管设置">⚙</button>
+    </div>
+  </header>
+
+  <main class="game-main">
+    <!-- 左侧：玩家面板 -->
+    <aside class="panel players-panel">
+      <div class="panel-title">// 星空参与者 <span id="player-count"></span></div>
+      <div id="player-grid" class="player-grid"></div>
+    </aside>
+
+    <!-- 中间：主舞台 -->
+    <section class="stage">
+      <div id="stage-banner" class="stage-banner"></div>
+      <div id="event-feed" class="event-feed"></div>
+      <div id="speech-stage" class="speech-stage"></div>
+      <div id="action-area" class="action-area"></div>
+    </section>
+
+    <!-- 右侧：情报面板 -->
+    <aside class="panel intel-panel">
+      <div class="panel-title">// 我的情报</div>
+      <div id="my-role-mini" class="my-role-mini"></div>
+      <div class="intel-section">
+        <div class="intel-label">私密记录 / PRIVATE LOG</div>
+        <div id="private-notes" class="private-notes"></div>
+      </div>
+      <div class="intel-section log-section">
+        <div class="intel-label">事件日志 / EVENT LOG</div>
+        <div id="log-list" class="log-list"></div>
+      </div>
+    </aside>
+  </main>
+</section>
+
+<!-- ============ 结算界面 ============ -->
+<section id="end-screen" class="screen">
+  <div class="end-wrap">
+    <div id="end-banner" class="end-banner"></div>
+    <div id="end-title" class="end-title"></div>
+    <div id="end-desc" class="end-desc"></div>
+    <div class="reveal-all-title">// 全场身份揭晓</div>
+    <div id="end-roles" class="end-roles"></div>
+    <button id="restart-btn" class="neon-btn primary big"><span>再来一局</span> <span class="arrow">▶</span></button>
+  </div>
+</section>
+
+<!-- 模态框容器 -->
+<div id="modal-root"></div>
+
+<!-- AI 设置面板容器 -->
+<div id="settings-root" style="display:none"></div>
+
+<script src="js/data.js"></script>
+<script src="js/settings.js"></script>
+<script src="js/ai.js"></script>
+<script src="js/llm.js"></script>
+<script src="js/decider.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
